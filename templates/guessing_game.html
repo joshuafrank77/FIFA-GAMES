@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess the Player</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Guess the Player</h1>
+
+        <div id="guessing-game">
+            <input type="text" id="player-name" class="form-control mt-3" placeholder="Type player name...">
+            <div id="suggestions" class="list-group"></div>
+            <div class="mt-4">
+                <table class="table table-bordered" id="attempts-table">
+                    <thead>
+                        <tr>
+                            <th>Player Name</th>
+                            <th>Age</th>
+                            <th>Club Name</th>
+                            <th>Foot</th>
+                            <th>Height</th>
+                            <th>Jersey Number</th>
+                            <th>League</th>
+                            <th>Market Value</th>
+                            <th>Continent</th>
+                            <th>Nationality 1</th>
+                            <th>Position Role</th>
+                            <th>Position</th>
+                            <th>Signed From Team</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attempts-body">
+                        <!-- Attempts will be appended here -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="attempts" class="mt-3">Attempts remaining: 10</div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div id="game-over-modal" class="modal" tabindex="-1" role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="game-over-title"></h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close" id="modal-close-btn">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="game-over-message"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" id="play-again-btn">Play Again</button>
+                        <button type="button" class="btn btn-secondary" id="choose-leagues-btn">Back to Choose Leagues</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <script>
+        const allPlayerData = JSON.parse('{{ all_player_data | tojson | safe }}');
+        const randomPlayer = JSON.parse('{{ random_player | tojson | safe }}');
+        let attempts = 10;
+
+        $('#player-name').on('input', function () {
+            let input = $(this).val().toLowerCase();
+            let suggestions = allPlayerData.filter(player => player['Player Name'].toLowerCase().includes(input));
+            $('#suggestions').empty();
+
+            suggestions.forEach(player => {
+                $('#suggestions').append(`<div class="suggestion list-group-item list-group-item-action">${player['Player Name']}</div>`);
+            });
+        });
+
+        $(document).on('click', '.suggestion', function () {
+            let selectedPlayerName = $(this).text();
+            $('#suggestions').empty();  // Clear the suggestions
+
+            $.ajax({
+                type: "POST",
+                url: "/check_player",
+                data: JSON.stringify({ 
+                    selected_player: selectedPlayerName, 
+                    random_player: randomPlayer 
+                }),
+                contentType: "application/json",
+                success: function (result) {
+                    displayComparison(result, selectedPlayerName);
+                    attempts--;
+                    $('#attempts').text(`Attempts remaining: ${attempts}`);
+
+                    if (attempts === 0) {
+                        showGameOver('You Lose!', `The correct player was: ${randomPlayer['Player Name']}`);
+                    }
+                },
+                error: function (error) {
+                    console.error("Error checking the player", error);
+                }
+            });
+        });
+
+        function displayComparison(result, playerName) {
+            const relevantKeys = ['Player Name', 'Age', 'Club Name', 'Foot', 'Height', 'Jersey Number', 'League', 'Market Value', 'Continent', 'Nationality 1', 'Position Role', 'Position', 'Signed From Team'];
+            let rowHtml = '<tr>';
+
+            relevantKeys.forEach(key => {
+                let status = result[key] ? result[key].status : 'mismatch';
+                let value = result[key] ? result[key].value : 'N/A';
+
+                if (status === 'match') {
+                    rowHtml += `<td class="bg-success">${value}</td>`;
+                } else if (status === 'higher' || status === 'lower') {
+                    let arrow = status === 'higher' ? '↓' : '↑';
+                    rowHtml += `<td class="bg-warning">${value} ${arrow}</td>`;
+                } else {
+                    rowHtml += `<td class="bg-danger">${value}</td>`;
+                }
+            });
+
+            rowHtml += '</tr>';
+            $('#attempts-body').append(rowHtml);
+
+            if (Object.values(result).every(item => item.status === 'match')) {
+                showGameOver('You Win!', `Congratulations! You guessed the player.`);
+            }
+        }
+        
+        function showGameOver(title, message) {
+            $('#game-over-title').text(title);
+            $('#game-over-message').text(message);
+            $('#game-over-modal').modal('show');
+
+            // Handle X button to default to play again
+            $('#modal-close-btn').on('click', function () {
+                window.location.href = "/guessing_game"; // Reload the game on close
+            });
+        }
+
+
+        $('#play-again-btn').on('click', function () {
+            // Reload the page to pick a new random player
+            window.location.href = "/guessing_game";
+        });
+
+        $('#choose-leagues-btn').on('click', function () {
+            // Redirect to the league selection page
+            window.location.href = "/";
+        });
+    </script>
+</body>
+</html>
